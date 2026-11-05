@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QUANT//CORE — Autonomous Claude Execution Terminal</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- TradingView Lightweight Charts -->
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            bg: '#090A0F',
+            panel: '#0F1117',
+            border: '#1E222D',
+            textMain: '#E2E8F0',
+            textMuted: '#64748B',
+            up: '#00C805',
+            down: '#FF3B30',
+            warn: '#F59E0B',
+            accent: '#3B82F6'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #090A0F;
+      color: #E2E8F0;
+      overflow: hidden;
+      user-select: none;
+    }
+    .tabular {
+      font-variant-numeric: tabular-nums;
+    }
+    /* İnce Kurumsal Scrollbar */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090A0F;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1E222D;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+    @keyframes pulse-fast {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .live-dot {
+      animation: pulse-fast 1.5s infinite;
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col font-sans text-xs antialiased">
+
+  <!-- ÜST BAR (TOP NAVIGATION & SYSTEM STATUS) -->
+  <header class="h-11 bg-panel border-b border-border flex items-center justify-between px-4 shrink-0">
+    <div class="flex items-center space-x-6">
+      <!-- Logo & Sistem Durumu -->
+      <div class="flex items-center space-x-2.5">
+        <span id="statusDot" class="w-2 h-2 rounded-full bg-up live-dot"></span>
+        <span class="font-mono font-bold tracking-wider text-sm text-white">QUANT<span class="text-textMuted">//</span>CLAUDE</span>
+        <span id="systemModeBadge" class="px-1.5 py-0.5 text-[10px] font-mono bg-up/10 text-up border border-up/30 rounded-sm">AUTONOMOUS 24/7</span>
+      </div>
+
+      <!-- Piyasa Seçici (Kripto & Amerikan Borsası Faz Notu) -->
+      <div class="flex items-center bg-bg border border-border rounded-sm p-0.5">
+        <button id="btnCrypto" onclick="switchMarket('CRYPTO')" class="px-3 py-1 font-mono text-[11px] font-medium bg-panel text-white border border-border rounded-sm transition">
+          CRYPTO PERP (CCXT)
+        </button>
+        <button id="btnUsStocks" onclick="switchMarket('US_EQUITIES')" class="px-3 py-1 font-mono text-[11px] font-medium text-textMuted hover:text-white flex items-center space-x-1.5 transition">
+          <span>US EQUITIES (NASDAQ/NYSE)</span>
+          <span class="text-[9px] px-1 bg-warn/10 text-warn border border-warn/30">PHASE 2</span>
+        </button>
+      </div>
+
+      <!-- Aktif Parite -->
+      <div class="hidden md:flex items-center space-x-3 border-l border-border pl-6 font-mono">
+        <span class="text-textMuted">ACTIVE FEED:</span>
+        <span class="text-white font-semibold">BTC/USDT:USDT</span>
+        <span id="liveHeaderPrice" class="text-up font-bold tabular text-sm">$89,420.50</span>
+        <span class="text-textMuted text-[10px]">FUNDING: <span class="text-white">0.0100%</span></span>
+      </div>
+    </div>
+
+    <!-- Sağ Kontroller & KILL SWITCH -->
+    <div class="flex items-center space-x-4">
+      <div class="hidden lg:flex items-center space-x-4 font-mono text-[11px] text-textMuted border-r border-border pr-4">
+        <div>API LATENCY: <span class="text-up tabular">18ms</span></div>
+        <div>CLAUDE ENGINE: <span class="text-white">SONNET-3.7-QUANT</span></div>
+      </div>
+      <button id="killSwitchBtn" onclick="toggleKillSwitch()" class="px-3 py-1.5 bg-down/15 hover:bg-down text-down hover:text-white border border-down font-mono font-bold text-[11px] tracking-wide transition flex items-center space-x-1.5 cursor-pointer">
+        <span>■ EMERGENCY KILL-SWITCH</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- METRİK ŞERİDİ (KEY PERFORMANCE INDICATORS) -->
+  <section class="grid grid-cols-2 md:grid-cols-6 bg-border gap-[1px] border-b border-border shrink-0">
+    <div class="bg-panel p-3 flex flex-col justify-between">
+      <span class="text-[10px] font-mono text-textMuted uppercase tracking-wider">Total Net Equity (Gerçek Bakiye)</span>
+      <div class="flex items-baseline justify-between mt-1">
+        <span id="kpiEquity" class="font-mono text-lg font-bold text-white tabular">$10,482.65</span>
+        <span class="font-mono text-[11px] text-up tabular">+4.82%</span>
+      </div>
+    </div>
+
+    <div class="bg-panel p-3 flex flex-col justify-between">
+      <span class="text-[10px] font-mono text-textMuted uppercase tracking-wider">Unrealized PnL (Açık Kâr/Zarar)</span>
+      <div class="flex items-baseline justify-between mt-1">
+        <span id="kpiUnrealized" class="font-mono text-lg font-bold text-up tabular">+$42.34</span>
+        <span class="font-mono text-[10px] text-textMuted tabular">AFTER FEES</span>
+      </div>
+    </div>
+
+    <div class="bg-panel p-3 flex flex-col justify-between">
+      <span class="text-[10px] font-mono text-textMuted uppercase tracking-wider">24H Realized Net Profit</span>
+      <div class="flex items-baseline justify-between mt-1">
+        <span id="kpiRealized" class="font-mono text-lg font-bold text-up tabular">+$128.90</span>
+        <span id="kpiTradeCount" class="font-mono text-[11px] text-textMuted tabular">38 Trades</span>
+      </div>
+    </div>
+
+    <div class="bg-panel p-3 flex flex-col justify-between">
+      <span class="text-[10px] font-mono text-textMuted uppercase tracking-wider">Micro-Scalp Fee Filter</span>
+      <div class="flex items-baseline justify-between mt-1">
+        <span class="font-mono text-sm font-semibold text-white tabular">Min Net > $0.05</span>
+        <span class="font-mono text-[10px] text-textMuted tabular">Fees Paid: -$6.42</span>
+      </div>
+    </div>
+
+    <div class="bg-panel p-3 flex flex-col justify-between">
+      <span class="text-[10px] font-mono text-textMuted uppercase tracking-wider">Win Rate & Profit Factor</span>
+      <div class="flex items-baseline justify-between mt-1">
+        <span class="font-mono text-lg font-bold text-white tabular">71.4%</span>
+        <span class="font-mono text-[11px] text-up tabular">PF: 2.41</span>
+      </div>
+    </div>
+
+    <div class="bg-panel p-3 flex flex-col justify-between">
+      <span class="text-[10px] font-mono text-textMuted uppercase tracking-wider">Daily Drawdown Limit (Max 3%)</span>
+      <div class="flex flex-col mt-1.5">
+        <div class="flex justify-between font-mono text-[11px] mb-1">
+          <span class="text-white tabular">Current: 0.42%</span>
+          <span class="text-up">SAFE</span>
+        </div>
+        <div class="w-full bg-bg h-1.5 overflow-hidden border border-border">
+          <div class="bg-up h-full" style="width: 14%"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ANA ÇALIŞMA ALANI (1PX HAIRLINE GRID) -->
+  <main class="flex-1 grid grid-cols-12 bg-border gap-[1px] overflow-hidden">
+
+    <!-- SOL VE ORTA SÜTUN: GRAFİK VE POZİSYON TABLOSU (8 SÜTUN) -->
+    <div class="col-span-12 lg:col-span-8 flex flex-col bg-border gap-[1px] overflow-hidden">
+
+      <!-- ÜST: TRADINGVIEW GRAFİK ALANI -->
+      <div class="h-[58%] bg-bg flex flex-col relative">
+        <!-- Grafik Üst Bilgi Çubuğu -->
+        <div class="h-8 bg-panel border-b border-border px-3 flex items-center justify-between text-[11px] font-mono shrink-0">
+          <div class="flex items-center space-x-4">
+            <span class="font-bold text-white">BTC/USDT PERPETUAL</span>
+            <div class="flex space-x-1">
+              <button class="px-1.5 py-0.5 bg-bg text-white border border-border">1m</button>
+              <button class="px-1.5 py-0.5 text-textMuted hover:text-white">5m</button>
+              <button class="px-1.5 py-0.5 text-textMuted hover:text-white">15m</button>
+              <button class="px-1.5 py-0.5 text-textMuted hover:text-white">1H</button>
+            </div>
+            <span class="text-textMuted hidden sm:inline">INDICATORS: <span class="text-accent">EMA(20)</span> · <span class="text-warn">VWAP</span> · <span class="text-up">ORDERBOOK IMBALANCE</span></span>
+          </div>
+          <div class="flex items-center space-x-3">
+            <span class="text-textMuted">SPREAD: <span class="text-white tabular">0.10 USDT</span></span>
+          </div>
+        </div>
+
+        <!-- Amerikan Borsası Faz 2 Uyarı Katmanı (Varsayılan Gizli) -->
+        <div id="usEquitiesOverlay" class="hidden absolute inset-0 bg-bg/95 z-20 flex-col items-center justify-center p-8 text-center">
+          <div class="max-w-lg border border-border bg-panel p-6">
+            <div class="text-warn font-mono text-xs uppercase tracking-widest mb-2">[ ARCHITECTURAL NOTE: PHASE 2 — US EQUITIES ]</div>
+            <h2 class="text-white font-mono text-base font-bold mb-3">NASDAQ / NYSE Adapter Katmanı Hazır</h2>
+            <p class="text-textMuted text-xs leading-relaxed mb-4">
+              Sistem mimarisi <code class="text-white bg-bg px-1 py-0.5 border border-border">BaseBrokerAdapter</code> soyutlaması ile tasarlanmıştır. Kripto motoru canlıda test edildikten sonra <strong>Alpaca API / Interactive Brokers</strong> anahtarları girilerek aynı Claude karar motoru ile AAPL, NVDA, TSLA, SPY üzerinde Long/Short işlemlere açılacaktır.
+            </p>
+            <div class="grid grid-cols-3 gap-2 text-left font-mono text-[10px] border-t border-border pt-4 mb-4">
+              <div class="bg-bg p-2 border border-border">
+                <div class="text-textMuted">MARKET HOURS</div>
+                <div class="text-white mt-0.5">09:30 - 16:00 EST</div>
+              </div>
+              <div class="bg-bg p-2 border border-border">
+                <div class="text-textMuted">REGULATION</div>
+                <div class="text-white mt-0.5">PDT Rule & SEC Guard</div>
+              </div>
+              <div class="bg-bg p-2 border border-border">
+                <div class="text-textMuted">NEWS FEED</div>
+                <div class="text-white mt-0.5">SEC 8-K & Earnings</div>
+              </div>
+            </div>
+            <button onclick="switchMarket('CRYPTO')" class="px-4 py-1.5 bg-accent text-white font-mono text-xs font-semibold">
+              KRİPTO TERMİNALİNE DÖN
+            </button>
+          </div>
+        </div>
+
+        <!-- Gerçek Grafik Konteyneri -->
+        <div id="tvChartContainer" class="flex-1 w-full"></div>
+      </div>
+
+      <!-- ALT: AÇIK POZİSYONLAR VE İŞLEM GEÇMİŞİ -->
+      <div class="h-[42%] bg-panel flex flex-col overflow-hidden">
+        <div class="h-8 bg-bg border-b border-border px-3 flex items-center justify-between font-mono text-[11px] shrink-0">
+          <div class="flex space-x-4 h-full">
+            <button onclick="switchTab('positions')" id="tabPositions" class="border-b-2 border-white text-white font-semibold h-full flex items-center">
+              OPEN POSITIONS (3)
+            </button>
+            <button onclick="switchTab('history')" id="tabHistory" class="border-b-2 border-transparent text-textMuted hover:text-white h-full flex items-center">
+              FILLED TRADES & MICRO-PROFITS (38)
+            </button>
+          </div>
+          <div class="text-textMuted text-[10px]">
+            ALL POSITIONS PROTECTED BY <span class="text-white">HARD STOP-LOSS</span>
+          </div>
+        </div>
+
+        <!-- Açık Pozisyonlar Tablosu -->
+        <div id="viewPositions" class="flex-1 overflow-auto">
+          <table class="w-full text-left border-collapse font-mono text-[11px] tabular">
+            <thead>
+              <tr class="border-b border-border text-textMuted bg-bg/50 text-[10px]">
+                <th class="py-2 px-3">SYMBOL</th>
+                <th class="py-2 px-2">SIDE</th>
+                <th class="py-2 px-2">SIZE</th>
+                <th class="py-2 px-2">ENTRY PRICE</th>
+                <th class="py-2 px-2">MARK PRICE</th>
+                <th class="py-2 px-2">HARD SL / TRAIL TP</th>
+                <th class="py-2 px-2">EST. FEE</th>
+                <th class="py-2 px-3 text-right">NET PnL (USDT)</th>
+                <th class="py-2 px-3 text-right">ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="positionsTableBody" class="divide-y divide-border">
+              <!-- JS ile canlı doldurulur -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Geçmiş İşlemler Tablosu (Gizli) -->
+        <div id="viewHistory" class="hidden flex-1 overflow-auto">
+          <table class="w-full text-left border-collapse font-mono text-[11px] tabular">
+            <thead>
+              <tr class="border-b border-border text-textMuted bg-bg/50 text-[10px]">
+                <th class="py-2 px-3">TIME</th>
+                <th class="py-2 px-2">SYMBOL</th>
+                <th class="py-2 px-2">SIDE</th>
+                <th class="py-2 px-2">ENTRY -> EXIT</th>
+                <th class="py-2 px-2">GROSS PnL</th>
+                <th class="py-2 px-2">FEE PAID</th>
+                <th class="py-2 px-3 text-right">NET PROFIT</th>
+                <th class="py-2 px-3">CLAUDE TRIGGER</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody" class="divide-y divide-border">
+              <!-- JS ile doldurulur -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SAĞ SÜTUN: CLAUDE CANLI MUHAKEME (REASONING) & HABER RADARI (4 SÜTUN) -->
+    <div class="col-span-12 lg:col-span-4 flex flex-col bg-border gap-[1px] overflow-hidden">
+
+      <!-- ÜST SAĞ: CLAUDE AUTONOMOUS DECISION STREAM -->
+      <div class="h-[60%] bg-panel flex flex-col overflow-hidden">
+        <div class="h-8 bg-bg border-b border-border px-3 flex items-center justify-between font-mono text-[11px] shrink-0">
+          <div class="flex items-center space-x-2">
+            <span class="w-1.5 h-1.5 bg-accent rounded-full live-dot"></span>
+            <span class="font-bold text-white">CLAUDE DECISION & REASONING LOG</span>
+          </div>
+          <span class="text-[10px] text-textMuted">STRUCTURED JSON</span>
+        </div>
+
+        <!-- Canlı Akan Karar Kutusu -->
+        <div id="claudeLogContainer" class="flex-1 p-3 overflow-y-auto space-y-2.5 font-mono text-[11px]">
+          <!-- JS ile canlı loglar eklenir -->
+        </div>
+      </div>
+
+      <!-- ALT SAĞ: GERÇEK ZAMANLI HABER VE SENTIMENT MOTORU -->
+      <div class="h-[40%] bg-panel flex flex-col overflow-hidden">
+        <div class="h-8 bg-bg border-b border-border px-3 flex items-center justify-between font-mono text-[11px] shrink-0">
+          <span class="font-bold text-white">LIVE NEWS & SENTIMENT WIRE</span>
+          <span class="text-[10px] text-up">AGGREGATED: +68% BULLISH</span>
+        </div>
+
+        <div id="newsContainer" class="flex-1 divide-y divide-border overflow-y-auto font-mono text-[11px]">
+          <!-- JS ile haberler eklenir -->
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- JAVASCRIPT CANLI SİMÜLASYON VE GRAFİK MOTORU -->
+  <script>
+    // 1. TRADINGVIEW LIGHTWEIGHT CHART KURULUMU
+    const chartContainer = document.getElementById('tvChartContainer');
+    const chart = LightweightCharts.createChart(chartContainer, {
+      layout: {
+        background: { type: 'solid', color: '#090A0F' },
+        textColor: '#64748B',
+        fontFamily: 'JetBrains Mono',
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: '#141720' },
+        horzLines: { color: '#141720' },
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+      },
+      rightPriceScale: {
+        borderColor: '#1E222D',
+      },
+      timeScale: {
+        borderColor: '#1E222D',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+    });
+
+    const candleSeries = chart.addCandlestickSeries({
+      upColor: '#00C805',
+      downColor: '#FF3B30',
+      borderDownColor: '#FF3B30',
+      borderUpColor: '#00C805',
+      wickDownColor: '#FF3B30',
+      wickUpColor: '#00C805',
+    });
+
+    // Başlangıç Mum Verileri Üretimi
+    let currentPrice = 89420.50;
+    let currentTime = Math.floor(Date.now() / 1000) - (120 * 60);
+    const initialCandles = [];
+
+    for (let i = 0; i < 120; i++) {
+      const open = currentPrice;
+      const change = (Math.random() - 0.48) * 140;
+      const close = +(open + change).toFixed(2);
+      const high = +(Math.max(open, close) + Math.random() * 65).toFixed(2);
+      const low = +(Math.min(open, close) - Math.random() * 65).toFixed(2);
+      initialCandles.push({ time: currentTime, open, high, low, close });
+      currentPrice = close;
+      currentTime += 60;
+    }
+    candleSeries.setData(initialCandles);
+
+    // Grafik Üzerinde Claude'un İşlem İşaretleri (Markers)
+    candleSeries.setMarkers([
+      {
+        time: initialCandles[initialCandles.length - 28].time,
+        position: 'belowBar',
+        color: '#00C805',
+        shape: 'arrowUp',
+        text: 'CLAUDE LONG @ ' + initialCandles[initialCandles.length - 28].low
+      },
+      {
+        time: initialCandles[initialCandles.length - 12].time,
+        position: 'aboveBar',
+        color: '#FF3B30',
+        shape: 'arrowDown',
+        text: 'SCALP TP +$14.20'
+      }
+    ]);
+
+    // Pencere yeniden boyutlandığında grafiği oturt
+    window.addEventListener('resize', () => {
+      chart.applyOptions({
+        width: chartContainer.clientWidth,
+        height: chartContainer.clientHeight
+      });
+    });
+
+    // 2. CANLI POZİSYON VERİLERİ
+    let positions = [
+      { id: 1, symbol: 'BTC/USDT', side: 'LONG', lev: '3x', size: '0.15 BTC', entry: 89120.00, mark: 89420.50, sl: '88,650.0', tp: '89,900.0', fee: 1.34 },
+      { id: 2, symbol: 'SOL/USDT', side: 'SHORT', lev: '2x', size: '25.0 SOL', entry: 184.50, mark: 183.90, sl: '186.80', tp: '180.50', fee: 0.46 },
+      { id: 3, symbol: 'ETH/USDT', side: 'LONG', lev: '3x', size: '1.20 ETH', entry: 2940.00, mark: 2943.80, sl: '2,915.0', tp: '2,985.0', fee: 0.71 }
+    ];
+
+    const historyTrades = [
+      { time: '00:08:42', symbol: 'BTC/USDT', side: 'LONG', route: '89,010 -> 89,145', gross: '+$20.25', fee: '-$1.20', net: '+$19.05', trigger: 'Orderbook Bid Wall + RSI Bounce' },
+      { time: '23:54:19', symbol: 'ETH/USDT', side: 'SHORT', route: '2,962 -> 2,955', gross: '+$8.40', fee: '-$0.65', net: '+$7.75', trigger: 'Micro-Scalp VWAP Rejection' },
+      { time: '23:41:05', symbol: 'SOL/USDT', side: 'LONG', route: '182.10 -> 182.45', gross: '+$1.75', fee: '-$0.32', net: '+$1.43', trigger: 'Fee-Aware Trailing Stop Hit' },
+      { time: '23:19:50', symbol: 'BTC/USDT', side: 'SHORT', route: '89,320 -> 89,390', gross: '-$3.50', fee: '-$0.88', net: '-$4.38', trigger: 'Hard Stop-Loss (Protected)' },
+      { time: '23:02:11', symbol: 'BNB/USDT', side: 'LONG', route: '612.40 -> 615.80', gross: '+$17.00', fee: '-$0.54', net: '+$16.46', trigger: 'Positive Ecosystem News + Vol Spike' }
+    ];
+
+    function renderPositions() {
+      const tbody = document.getElementById('positionsTableBody');
+      let totalUnrealized = 0;
+
+      tbody.innerHTML = positions.map(p => {
+        const priceDiff = p.side === 'LONG' ? (p.mark - p.entry) : (p.entry - p.mark);
+        const multiplier = p.symbol.startsWith('BTC') ? 0.15 : (p.symbol.startsWith('SOL') ? 25 : 1.2);
+        const netPnl = (priceDiff * multiplier) - p.fee;
+        totalUnrealized += netPnl;
+
+        const pnlClass = netPnl >= 0 ? 'text-up' : 'text-down';
+        const pnlSign = netPnl >= 0 ? '+' : '';
+        const sideBadge = p.side === 'LONG'
+          ? 'bg-up/10 text-up border border-up/30 px-1.5 py-0.5'
+          : 'bg-down/10 text-down border border-down/30 px-1.5 py-0.5';
+
+        return `
+          <tr class="hover:bg-bg/60 transition">
+            <td class="py-2.5 px-3 font-bold text-white">${p.symbol} <span class="text-textMuted font-normal">${p.lev}</span></td>
+            <td class="py-2.5 px-2"><span class="${sideBadge} text-[10px] font-bold">${p.side}</span></td>
+            <td class="py-2.5 px-2 text-white">${p.size}</td>
+            <td class="py-2.5 px-2 text-textMuted">$${p.entry.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            <td class="py-2.5 px-2 text-white font-semibold">$${p.mark.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            <td class="py-2.5 px-2 text-[10px]">
+              <span class="text-down">${p.sl}</span> / <span class="text-up">${p.tp}</span>
+            </td>
+            <td class="py-2.5 px-2 text-textMuted">-$${p.fee.toFixed(2)}</td>
+            <td class="py-2.5 px-3 text-right font-bold ${pnlClass}">${pnlSign}$${netPnl.toFixed(2)}</td>
+            <td class="py-2.5 px-3 text-right">
+              <button onclick="closePosition(${p.id})" class="px-2 py-0.5 bg-bg hover:bg-down hover:text-white border border-border text-textMuted text-[10px] transition">
+                MARKET CLOSE
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      const kpiUn = document.getElementById('kpiUnrealized');
+      kpiUn.textContent = (totalUnrealized >= 0 ? '+$' : '-$') + Math.abs(totalUnrealized).toFixed(2);
+      kpiUn.className = `font-mono text-lg font-bold tabular ${totalUnrealized >= 0 ? 'text-up' : 'text-down'}`;
+    }
+
+    function renderHistory() {
+      const tbody = document.getElementById('historyTableBody');
+      tbody.innerHTML = historyTrades.map(h => {
+        const isPos = h.net.startsWith('+');
+        return `
+          <tr class="hover:bg-bg/60">
+            <td class="py-2 px-3 text-textMuted">${h.time}</td>
+            <td class="py-2 px-2 font-bold text-white">${h.symbol}</td>
+            <td class="py-2 px-2"><span class="${h.side === 'LONG' ? 'text-up' : 'text-down'} font-bold">${h.side}</span></td>
+            <td class="py-2 px-2 text-textMuted">${h.route}</td>
+            <td class="py-2 px-2 text-white">${h.gross}</td>
+            <td class="py-2 px-2 text-textMuted">${h.fee}</td>
+            <td class="py-2 px-3 text-right font-bold ${isPos ? 'text-up' : 'text-down'}">${h.net}</td>
+            <td class="py-2 px-3 text-textMuted text-[10px]">${h.trigger}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // 3. CLAUDE CANLI MUHAKEME (REASONING) AKışı
+    const claudeLogs = [
+      {
+        time: '00:11:18',
+        pair: 'BTC/USDT',
+        action: 'HOLD & TRAIL TP',
+        badgeColor: 'text-accent border-accent/40 bg-accent/10',
+        metrics: 'RSI(14): 56.2 | OB Imbalance: +38% Bid | Funding: 0.01%',
+        reason: 'Açık LONG pozisyon +$43.70 brüt kârda. Komisyon ($1.34) düşüldüğünde net +$42.36 kâr garanti altına alındı. İz süren Stop-Loss (Trailing) $89,280 seviyesine çekildi.'
+      },
+      {
+        time: '00:10:45',
+        pair: 'XRP/USDT',
+        action: 'REJECTED (FEE FILTER)',
+        badgeColor: 'text-warn border-warn/40 bg-warn/10',
+        metrics: 'Expected Move: +0.11% | Est. Maker/Taker Fee: 0.08%',
+        reason: 'Matematiksel motor mikro-scalp sinyali üretti ancak beklenen net kâr ($0.14), güvenlik çarpanı olan (Komisyon x 2 = $0.48) şartını sağlamadığı için işlem reddedildi.'
+      },
+      {
+        time: '00:09:12',
+        pair: 'SOL/USDT',
+        action: 'OPEN SHORT 2x',
+        badgeColor: 'text-down border-down/40 bg-down/10',
+        metrics: 'VWAP Deviation: +2.1σ | CVD: Bearish Divergence',
+        reason: '184.50$ direncinde satıcı likiditesi (Ask Wall) tespit edildi. Haber akışı nötr. Hard Stop-Loss 186.80$ olarak borsaya iletildi.'
+      }
+    ];
+
+    function renderClaudeLogs() {
+      const container = document.getElementById('claudeLogContainer');
+      container.innerHTML = claudeLogs.map(log => `
+        <div class="bg-bg border border-border p-2.5">
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center space-x-2">
+              <span class="text-textMuted text-[10px]">[${log.time}]</span>
+              <span class="font-bold text-white">${log.pair}</span>
+            </div>
+            <span class="px-1.5 py-0.5 text-[9px] font-bold border ${log.badgeColor}">${log.action}</span>
+          </div>
+          <div class="text-[10px] text-accent mb-1.5 pb-1.5 border-b border-border/60">${log.metrics}</div>
+          <p class="text-textMain text-[11px] leading-relaxed font-sans">${log.reason}</p>
+        </div>
+      `).join('');
+    }
+
+    // 4. CANLI HABER RADARI
+    const newsItems = [
+      { time: '2m ago', source: 'REUTERS / SEC WIRE', score: '+84% BULL', color: 'text-up', title: 'Kurumsal Spot ETF girişleri son 48 saatte 420M$ seviyesini aştı.' },
+      { time: '11m ago', source: 'ON-CHAIN WHALE ALERT', score: 'NEUTRAL', color: 'text-textMuted', title: 'Binance Soğuk Cüzdanları arasında 1,500 BTC iç transfer gerçekleşti.' },
+      { time: '24m ago', source: 'MACRO / FED WATCH', score: '+62% BULL', color: 'text-up', title: 'ABD Hazine tahvil getirilerinde geri çekilme; riskli varlıklara likidite akışı.' },
+      { time: '41m ago', source: 'EXCHANGE API STATUS', score: 'SAFE', color: 'text-accent', title: 'Tüm WebSocket emir defteri kanalları 20ms altında senkronize.' }
+    ];
+
+    function renderNews() {
+      const container = document.getElementById('newsContainer');
+      container.innerHTML = newsItems.map(n => `
+        <div class="p-2.5 hover:bg-bg/50 transition">
+          <div class="flex items-center justify-between text-[10px] mb-1">
+            <span class="text-textMuted">${n.source} · ${n.time}</span>
+            <span class="font-bold ${n.color}">[${n.score}]</span>
+          </div>
+          <div class="text-textMain font-sans text-xs leading-snug">${n.title}</div>
+        </div>
+      `).join('');
+    }
+
+    // 5. ETKİLEŞİMLER VE CANLI FİYAT AKışı (TICKER LOOP)
+    let systemActive = true;
+
+    setInterval(() => {
+      if (!systemActive) return;
+
+      // BTC fiyatını ufak adımlarla güncelle
+      const delta = (Math.random() - 0.485) * 18;
+      currentPrice = +(currentPrice + delta).toFixed(2);
+
+      // Üst bar fiyatını güncelle
+      const headerPrice = document.getElementById('liveHeaderPrice');
+      headerPrice.textContent = '$' + currentPrice.toLocaleString('en-US', {minimumFractionDigits: 2});
+      headerPrice.className = `font-bold tabular text-sm ${delta >= 0 ? 'text-up' : 'text-down'}`;
+
+      // Grafiğin son mumunu güncelle
+      const lastCandle = initialCandles[initialCandles.length - 1];
+      lastCandle.close = currentPrice;
+      if (currentPrice > lastCandle.high) lastCandle.high = currentPrice;
+      if (currentPrice < lastCandle.low) lastCandle.low = currentPrice;
+      candleSeries.update(lastCandle);
+
+      // Pozisyon Mark fiyatlarını güncelle
+      positions[0].mark = currentPrice;
+      positions[1].mark = +(positions[1].mark + (Math.random() - 0.5) * 0.15).toFixed(2);
+      positions[2].mark = +(positions[2].mark + (Math.random() - 0.49) * 1.2).toFixed(2);
+      renderPositions();
+    }, 1200);
+
+    function switchTab(tab) {
+      const posView = document.getElementById('viewPositions');
+      const histView = document.getElementById('viewHistory');
+      const tabPos = document.getElementById('tabPositions');
+      const tabHist = document.getElementById('tabHistory');
+
+      if (tab === 'positions') {
+        posView.classList.remove('hidden');
+        histView.classList.add('hidden');
+        tabPos.className = 'border-b-2 border-white text-white font-semibold h-full flex items-center';
+        tabHist.className = 'border-b-2 border-transparent text-textMuted hover:text-white h-full flex items-center';
+      } else {
+        posView.classList.add('hidden');
+        histView.classList.remove('hidden');
+        tabHist.className = 'border-b-2 border-white text-white font-semibold h-full flex items-center';
+        tabPos.className = 'border-b-2 border-transparent text-textMuted hover:text-white h-full flex items-center';
+      }
+    }
+
+    function switchMarket(market) {
+      const overlay = document.getElementById('usEquitiesOverlay');
+      const btnCrypto = document.getElementById('btnCrypto');
+      const btnUs = document.getElementById('btnUsStocks');
+
+      if (market === 'US_EQUITIES') {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('flex');
+        btnUs.className = 'px-3 py-1 font-mono text-[11px] font-medium bg-panel text-white border border-border rounded-sm flex items-center space-x-1.5 transition';
+        btnCrypto.className = 'px-3 py-1 font-mono text-[11px] font-medium text-textMuted hover:text-white transition';
+      } else {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+        btnCrypto.className = 'px-3 py-1 font-mono text-[11px] font-medium bg-panel text-white border border-border rounded-sm transition';
+        btnUs.className = 'px-3 py-1 font-mono text-[11px] font-medium text-textMuted hover:text-white flex items-center space-x-1.5 transition';
+      }
+    }
+
+    function closePosition(id) {
+      positions = positions.filter(p => p.id !== id);
+      renderPositions();
+    }
+
+    function toggleKillSwitch() {
+      systemActive = !systemActive;
+      const btn = document.getElementById('killSwitchBtn');
+      const badge = document.getElementById('systemModeBadge');
+      const dot = document.getElementById('statusDot');
+
+      if (!systemActive) {
+        positions = [];
+        renderPositions();
+        btn.innerHTML = '<span>▶ RESUME AUTONOMOUS ENGINE</span>';
+        btn.className = 'px-3 py-1.5 bg-up/20 text-up border border-up font-mono font-bold text-[11px] tracking-wide transition cursor-pointer';
+        badge.textContent = 'HALTED — ALL POSITIONS CLOSED';
+        badge.className = 'px-1.5 py-0.5 text-[10px] font-mono bg-down/20 text-down border border-down/40 rounded-sm';
+        dot.className = 'w-2 h-2 rounded-full bg-down';
+      } else {
+        btn.innerHTML = '<span>■ EMERGENCY KILL-SWITCH</span>';
+        btn.className = 'px-3 py-1.5 bg-down/15 hover:bg-down text-down hover:text-white border border-down font-mono font-bold text-[11px] tracking-wide transition cursor-pointer';
+        badge.textContent = 'AUTONOMOUS 24/7';
+        badge.className = 'px-1.5 py-0.5 text-[10px] font-mono bg-up/10 text-up border border-up/30 rounded-sm';
+        dot.className = 'w-2 h-2 rounded-full bg-up live-dot';
+      }
+    }
+
+    // İlk Yükleme
+    renderPositions();
+    renderHistory();
+    renderClaudeLogs();
+    renderNews();
+  </script>
+</body>
+</html>

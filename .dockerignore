@@ -1,0 +1,26 @@
+# Sırlar ve yerel durum imaja girmez
+.env
+.env.*
+!.env.example
+
+# Git / cache
+.git
+.gitignore
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Testler ve ekran görüntüleri çalışma için gerekmez
+tests/
+**/*.png
+
+# Docker dosyalarının kendisi
+Dockerfile
+docker-compose*.yml
+deploy/
+README.md

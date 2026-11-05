@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QUANT//CORE — Autonomous Claude Execution Terminal</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- TradingView Lightweight Charts -->
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            bg: '#090A0F',
+            panel: '#0F1117',
+            border: '#1E222D',
+            textMain: '#E2E8F0',
+            textMuted: '#64748B',
+            up: '#00C805',
+            down: '#FF3B30',
+            warn: '#F59E0B',
+            accent: '#3B82F6'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #090A0F;
+      color: #E2E8F0;
+      overflow: hidden;
+      user-select: none;
+    }
+    .tabular {
+      font-variant-numeric: tabular-nums;
+    }
+    /* İnce Kurumsal Scrollbar */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090A0F;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1E222D;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+    @keyframes pulse-fast {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .live-dot {
+      animation: pulse-fast 1.5s infinite;
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col font-sans text-xs antialiased">
+
+  <!-- ÜST BAR (TOP NAVIGATION & SYSTEM STATUS) -->
+  <header class="h-11 bg-panel border-b border-border flex items-center justify-between px-4 shrink-0">
+    <div class="flex items-center space-x-6">
+      <!-- Logo & Sistem Durumu -->
+      <div class="flex items-center space-x-2.5">
+        <span id="statusDot" class="w-2 h-2 rounded-full bg-up live-dot"></span>
+        <span class="font-mono font-bold tracking-wider text-sm text-white">QUANT<span class="text-textMuted">//</span>CLAUDE</span>
+        <span id="systemModeBadge" class="px-1.5 py-0.5 text-[10px] font-mono bg-up/10 text-up border border-up/30 rounded-sm">AUTONOMOUS 24/7</span>
+      </div>
+
+      <!-- Piyasa Seçici (Kripto & Amerikan Borsası Faz Notu) -->
+      <div class="flex items-center bg-bg border border-border rounded-sm p-0.5">
+        <button id="btnCrypto" onclick="switchMarket('CRYPTO')" class="px-3 py-1 font-mono text-[11px] font-medium bg-panel text-white border border-border rounded-sm transition">
+          CRYPTO PERP (CCXT)
+        </button>
+        <button id="btnUsStocks" onclick="switchMarket('US_EQUITIES')" class="px-3 py-1 font-mono text-[11px] font-medium text-textMuted hover:text-white flex items-center space-x-1.5 transition">
+          <span>US EQUITIES (NASDAQ/NYSE)</span>
+          <span class="text-[9px] px-1 bg-warn/10 text-warn border border-warn/30">PHASE 2</span>
+        </button>
+      </div>
+
+      <!-- Aktif Parite -->
+      <div class="hidden md:flex items-center space-x-3 border-l border-border pl-6 font-mono">
+        <span class="text-textMuted">ACTIVE FEED:</span>
+        <span id="activeSymbol" class="text-white font-semibold">—</span>
+        <span id="liveHeaderPrice" class="text-up font-bold tabular text-sm">—</span>
+        <span class="text-textMuted text-[10px]">FUNDING: <span id="headerFunding" class="text-white">—</span></span>
+      </div>
+    </div>
+
+    <!-- Sağ Kontroller & KILL SWITCH -->
+    <div class="flex items-center space-x-4">
+      <div class="hidden lg:flex items-center space-x-4 font-mono text-[11px] text-textMuted border-r border-border pr-4">
+        <div>API LATENCY: <span id="latencyValue" class="text-textMuted tabular">—</span></div>
+        <div>CLAUDE ENGINE: <span id="claudeEngine" class="text-white">—</span></div>
+      </div>
+      <button id="killSwitchBtn" onclick="toggleKillSwitch()" class="px-3 py-1.5 bg-down/15 hover:bg-down text-down hover:text-white border border-down font-mono font-bold text-[11px] tracking-wide transition flex items-center space-x-1.5 cursor-pointer">
+        <span>■ EMERGENCY KILL-SWITCH</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- METRİK ŞERİDİ (KEY PERFORMANCE INDICATORS) -->
+  <section class="grid grid-cols-2 md:grid-cols-6 bg-border gap-[1px] border-b border-border shrink-0">
+    <div class="bg-panel p-3 flex flex-col justify-between">
+      <span class="text-[10px] font-mono text-textMuted uppercase tracking-wider">Total Net Equity (Gerçek Bakiye)</span>
+      <div class="flex items-baseline justify-between mt-1">
+        <span id="kpiEquity" class="font-mono text-lg font-bold text-white tabular">—</span>
+        <span id="kpiEquityChange" class="font-mono text-[11px] text-textMuted tabular">—</span>
+      </div>
+    </div>
+
+    <div class="bg-panel p-3 flex flex-col justify-between">
+      <span class="text-[10px] font-mono text-textMuted uppercase tracking-wider">Unrealized PnL (Açık Kâr/Zarar)</span>
+      <div class="flex items-baseline justify-between mt-1">
+        <span id="kpiUnrealized" class="font-mono text-lg font-bold text-textMuted tabular">—</span>
+        <span class="font-mono text-[10px] text-textMuted tabular">AFTER FEES</span>
+      </div>
+    </div>
+
+    <div class="bg-panel p-3 flex flex-col justify-between">
+      <span class="text-[10px] font-mono text-textMuted uppercase tracking-wider">24H Realized Net Profit</span>
+      <div class="flex items-baseline justify-between mt-1">
+        <span id="kpiRealized" class="font-mono text-lg font-bold text-textMuted tabular">—</span>
+        <span id="kpiTradeCount" class="font-mono text-[11px] text-textMuted tabular">—</span>
+      </div>
+    </div>
+
+    <div class="bg-panel p-3 flex flex-col justify-between">
+      <span class="text-[10px] font-mono text-textMuted uppercase tracking-wider">Micro-Scalp Fee Filter</span>
+      <div class="flex items-baseline justify-between mt-1">
+        <span id="kpiMinNet" class="font-mono text-sm font-semibold text-white tabular">Min Net > —</span>
+        <span id="kpiFees" class="font-mono text-[10px] text-textMuted tabular">Fees Paid: —</span>
+      </div>
+    </div>
+
+    <div class="bg-panel p-3 flex flex-col justify-between">
+      <span class="text-[10px] font-mono text-textMuted uppercase tracking-wider">Win Rate & Profit Factor</span>
+      <div class="flex items-baseline justify-between mt-1">
+        <span id="kpiWinRate" class="font-mono text-lg font-bold text-white tabular">—</span>
+        <span id="kpiPF" class="font-mono text-[11px] text-textMuted tabular">PF: —</span>
+      </div>
+    </div>
+
+    <div class="bg-panel p-3 flex flex-col justify-between">
+      <span id="kpiDdLabel" class="text-[10px] font-mono text-textMuted uppercase tracking-wider">Daily Drawdown Limit (Max 3%)</span>
+      <div class="flex flex-col mt-1.5">
+        <div class="flex justify-between font-mono text-[11px] mb-1">
+          <span id="kpiDdCurrent" class="text-white tabular">Current: —</span>
+          <span id="kpiDdState" class="text-textMuted">—</span>
+        </div>
+        <div class="w-full bg-bg h-1.5 overflow-hidden border border-border">
+          <div id="kpiDdBar" class="bg-up h-full" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ANA ÇALIŞMA ALANI (1PX HAIRLINE GRID) -->
+  <main class="flex-1 grid grid-cols-12 bg-border gap-[1px] overflow-hidden">
+
+    <!-- SOL VE ORTA SÜTUN: GRAFİK VE POZİSYON TABLOSU (8 SÜTUN) -->
+    <div class="col-span-12 lg:col-span-8 flex flex-col bg-border gap-[1px] overflow-hidden">
+
+      <!-- ÜST: TRADINGVIEW GRAFİK ALANI -->
+      <div class="h-[58%] bg-bg flex flex-col relative">
+        <!-- Grafik Üst Bilgi Çubuğu -->
+        <div class="h-8 bg-panel border-b border-border px-3 flex items-center justify-between text-[11px] font-mono shrink-0">
+          <div class="flex items-center space-x-4">
+            <span id="chartTitle" class="font-bold text-white">— PERPETUAL</span>
+            <div class="flex space-x-1">
+              <button class="px-1.5 py-0.5 bg-bg text-white border border-border">1m</button>
+              <button class="px-1.5 py-0.5 text-textMuted hover:text-white">5m</button>
+              <button class="px-1.5 py-0.5 text-textMuted hover:text-white">15m</button>
+              <button class="px-1.5 py-0.5 text-textMuted hover:text-white">1H</button>
+            </div>
+            <span class="text-textMuted hidden sm:inline">INDICATORS: <span class="text-accent">EMA(20)</span> · <span class="text-warn">VWAP</span> · <span class="text-up">ORDERBOOK IMBALANCE</span></span>
+          </div>
+          <div class="flex items-center space-x-3">
+            <span class="text-textMuted">SPREAD: <span id="chartSpread" class="text-white tabular">—</span></span>
+          </div>
+        </div>
+
+        <!-- Amerikan Borsası Faz 2 Uyarı Katmanı (Varsayılan Gizli) -->
+        <div id="usEquitiesOverlay" class="hidden absolute inset-0 bg-bg/95 z-20 flex-col items-center justify-center p-8 text-center">
+          <div class="max-w-lg border border-border bg-panel p-6">
+            <div class="text-warn font-mono text-xs uppercase tracking-widest mb-2">[ ARCHITECTURAL NOTE: PHASE 2 — US EQUITIES ]</div>
+            <h2 class="text-white font-mono text-base font-bold mb-3">NASDAQ / NYSE Adapter Katmanı Hazır</h2>
+            <p class="text-textMuted text-xs leading-relaxed mb-4">
+              Sistem mimarisi <code class="text-white bg-bg px-1 py-0.5 border border-border">BaseBrokerAdapter</code> soyutlaması ile tasarlanmıştır. Kripto motoru canlıda test edildikten sonra <strong>Alpaca API / Interactive Brokers</strong> anahtarları girilerek aynı Claude karar motoru ile AAPL, NVDA, TSLA, SPY üzerinde Long/Short işlemlere açılacaktır.
+            </p>
+            <div class="grid grid-cols-3 gap-2 text-left font-mono text-[10px] border-t border-border pt-4 mb-4">
+              <div class="bg-bg p-2 border border-border">
+                <div class="text-textMuted">MARKET HOURS</div>
+                <div class="text-white mt-0.5">09:30 - 16:00 EST</div>
+              </div>
+              <div class="bg-bg p-2 border border-border">
+                <div class="text-textMuted">REGULATION</div>
+                <div class="text-white mt-0.5">PDT Rule & SEC Guard</div>
+              </div>
+              <div class="bg-bg p-2 border border-border">
+                <div class="text-textMuted">NEWS FEED</div>
+                <div class="text-white mt-0.5">SEC 8-K & Earnings</div>
+              </div>
+            </div>
+            <button onclick="switchMarket('CRYPTO')" class="px-4 py-1.5 bg-accent text-white font-mono text-xs font-semibold">
+              KRİPTO TERMİNALİNE DÖN
+            </button>
+          </div>
+        </div>
+
+        <!-- Gerçek Grafik Konteyneri -->
+        <div id="tvChartContainer" class="flex-1 w-full"></div>
+      </div>
+
+      <!-- ALT: AÇIK POZİSYONLAR VE İŞLEM GEÇMİŞİ -->
+      <div class="h-[42%] bg-panel flex flex-col overflow-hidden">
+        <div class="h-8 bg-bg border-b border-border px-3 flex items-center justify-between font-mono text-[11px] shrink-0">
+          <div class="flex space-x-4 h-full">
+            <button onclick="switchTab('positions')" id="tabPositions" class="border-b-2 border-white text-white font-semibold h-full flex items-center">
+              OPEN POSITIONS (<span id="posCount">0</span>)
+            </button>
+            <button onclick="switchTab('history')" id="tabHistory" class="border-b-2 border-transparent text-textMuted hover:text-white h-full flex items-center">
+              FILLED TRADES & MICRO-PROFITS (<span id="histCount">0</span>)
+            </button>
+          </div>
+          <div class="text-textMuted text-[10px]">
+            ALL POSITIONS PROTECTED BY <span class="text-white">HARD STOP-LOSS</span>
+          </div>
+        </div>
+
+        <!-- Açık Pozisyonlar Tablosu -->
+        <div id="viewPositions" class="flex-1 overflow-auto">
+          <table class="w-full text-left border-collapse font-mono text-[11px] tabular">
+            <thead>
+              <tr class="border-b border-border text-textMuted bg-bg/50 text-[10px]">
+                <th class="py-2 px-3">SYMBOL</th>
+                <th class="py-2 px-2">SIDE</th>
+                <th class="py-2 px-2">SIZE</th>
+                <th class="py-2 px-2">ENTRY PRICE</th>
+                <th class="py-2 px-2">MARK PRICE</th>
+                <th class="py-2 px-2">HARD SL / TRAIL TP</th>
+                <th class="py-2 px-2">EST. FEE</th>
+                <th class="py-2 px-3 text-right">NET PnL (USDT)</th>
+                <th class="py-2 px-3 text-right">ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="positionsTableBody" class="divide-y divide-border">
+              <!-- JS ile canlı doldurulur -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Geçmiş İşlemler Tablosu (Gizli) -->
+        <div id="viewHistory" class="hidden flex-1 overflow-auto">
+          <table class="w-full text-left border-collapse font-mono text-[11px] tabular">
+            <thead>
+              <tr class="border-b border-border text-textMuted bg-bg/50 text-[10px]">
+                <th class="py-2 px-3">TIME</th>
+                <th class="py-2 px-2">SYMBOL</th>
+                <th class="py-2 px-2">SIDE</th>
+                <th class="py-2 px-2">ENTRY -> EXIT</th>
+                <th class="py-2 px-2">GROSS PnL</th>
+                <th class="py-2 px-2">FEE PAID</th>
+                <th class="py-2 px-3 text-right">NET PROFIT</th>
+                <th class="py-2 px-3">CLAUDE TRIGGER</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody" class="divide-y divide-border">
+              <!-- JS ile doldurulur -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SAĞ SÜTUN: CLAUDE CANLI MUHAKEME (REASONING) & HABER RADARI (4 SÜTUN) -->
+    <div class="col-span-12 lg:col-span-4 flex flex-col bg-border gap-[1px] overflow-hidden">
+
+      <!-- ÜST SAĞ: CLAUDE AUTONOMOUS DECISION STREAM -->
+      <div class="h-[60%] bg-panel flex flex-col overflow-hidden">
+        <div class="h-8 bg-bg border-b border-border px-3 flex items-center justify-between font-mono text-[11px] shrink-0">
+          <div class="flex items-center space-x-2">
+            <span class="w-1.5 h-1.5 bg-accent rounded-full live-dot"></span>
+            <span class="font-bold text-white">CLAUDE DECISION & REASONING LOG</span>
+          </div>
+          <span class="text-[10px] text-textMuted">STRUCTURED JSON</span>
+        </div>
+
+        <!-- Canlı Akan Karar Kutusu -->
+        <div id="claudeLogContainer" class="flex-1 p-3 overflow-y-auto space-y-2.5 font-mono text-[11px]">
+          <!-- JS ile canlı loglar eklenir -->
+        </div>
+      </div>
+
+      <!-- ALT SAĞ: GERÇEK ZAMANLI HABER VE SENTIMENT MOTORU -->
+      <div class="h-[40%] bg-panel flex flex-col overflow-hidden">
+        <div class="h-8 bg-bg border-b border-border px-3 flex items-center justify-between font-mono text-[11px] shrink-0">
+          <span class="font-bold text-white">LIVE NEWS & SENTIMENT WIRE</span>
+          <span id="newsAggregate" class="text-[10px] text-textMuted">AGGREGATED: —</span>
+        </div>
+
+        <div id="newsContainer" class="flex-1 divide-y divide-border overflow-y-auto font-mono text-[11px]">
+          <!-- JS ile haberler eklenir -->
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- CANLI TERMİNAL İSTEMCİSİ: WEBSOCKET /ws/terminal + REST KONTROL -->
+  <script>
+    // ---------------------------------------------------------------- yardımcılar
+    const $ = (id) => document.getElementById(id);
+
+    // Sunucudan gelen HER string güvenilmezdir; şablonlara yalnızca bu fonksiyondan geçerek girer.
+    function escapeHtml(v) {
+      return String(v === null || v === undefined ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    const isNum = (n) => typeof n === 'number' && isFinite(n);
+    const nf = (n, min, max) => n.toLocaleString('en-US', { minimumFractionDigits: min, maximumFractionDigits: max });
+    function fmtPrice(n) {
+      if (!isNum(n)) return '—';
+      return '$' + nf(n, 2, Math.abs(n) >= 1000 ? 2 : 4);
+    }
+    function fmtPlain(n) {
+      if (!isNum(n)) return '—';
+      return nf(n, 2, Math.abs(n) >= 1000 ? 2 : 4);
+    }
+    function fmtMoney(n) { return isNum(n) ? '$' + nf(Math.abs(n), 2, 2) : '—'; }
+    function fmtSigned(n) { return isNum(n) ? (n >= 0 ? '+$' : '-$') + nf(Math.abs(n), 2, 2) : '—'; }
+    function fmtQty(n) { return isNum(n) ? nf(n, 0, 6) : '—'; }
+    const pnlColor = (n) => (isNum(n) && n < 0 ? 'text-down' : 'text-up');
+    const pad2 = (n) => String(n).padStart(2, '0');
+    function parseTs(v) {
+      if (isNum(v)) return v > 1e12 ? v : v * 1000;
+      if (typeof v !== 'string' || !v) return NaN;
+      // Saat dilimi içermeyen ISO zaman damgaları UTC kabul edilir.
+      const iso = /^\d{4}-\d\d-\d\dT[\d:.]+$/.test(v) ? v + 'Z' : v;
+      return Date.parse(iso);
+    }
+    function fmtClock(ms) {
+      if (!isNum(ms)) return '--:--:--';
+      const d = new Date(ms);
+      return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+    }
+    function fmtAgo(ms) {
+      if (!isNum(ms)) return '';
+      const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+      if (s < 60) return s + 's ago';
+      if (s < 3600) return Math.floor(s / 60) + 'm ago';
+      if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+      return Math.floor(s / 86400) + 'd ago';
+    }
+    const dispSym = (s) => String(s || '').split(':')[0];
+    const baseAsset = (s) => dispSym(s).split('/')[0];
+
+    // ---------------------------------------------------------------- 1. GRAFİK
+    const chartContainer = $('tvChartContainer');
+    const chart = LightweightCharts.createChart(chartContainer, {
+      layout: {
+        background: { type: 'solid', color: '#090A0F' },
+        textColor: '#64748B',
+        fontFamily: 'JetBrains Mono',
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: '#141720' },
+        horzLines: { color: '#141720' },
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+      },
+      rightPriceScale: {
+        borderColor: '#1E222D',
+      },
+      timeScale: {
+        borderColor: '#1E222D',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+    });
+
+    const candleSeries = chart.addCandlestickSeries({
+      upColor: '#00C805',
+      downColor: '#FF3B30',
+      borderDownColor: '#FF3B30',
+      borderUpColor: '#00C805',
+      wickDownColor: '#FF3B30',
+      wickUpColor: '#00C805',
+    });
+
+    // Pencere yeniden boyutlandığında grafiği oturt
+    window.addEventListener('resize', () => {
+      chart.applyOptions({
+        width: chartContainer.clientWidth,
+        height: chartContainer.clientHeight
+      });
+    });
+
+    // ---------------------------------------------------------------- 2. DURUM
+    const LIMITS = { logs: 25, news: 25, history: 50, markers: 200 };
+    const state = {
+      connected: false,
+      systemStatus: 'AUTONOMOUS 24/7',
+      killEngaged: false,
+      activeSymbol: null,
+      lastCandleTime: 0,
+      positions: [],      // open_positions items
+      history: [],        // trade_history items (newest first)
+      logs: [],           // view objects (newest first)
+      news: [],           // news_feed items (newest first)
+      markers: [],
+      kpis: null,
+    };
+    const pendingClose = new Set();
+    let controlToken = null;   // yalnızca bellekte; localStorage'a yazılmaz
+    let killBusy = false;
+    let errSeq = 0;
+
+    // ---------------------------------------------------------------- 3. DURUM ROZETİ / KILL-SWITCH GÖRÜNÜMÜ
+    const BADGE_BASE = 'px-1.5 py-0.5 text-[10px] font-mono rounded-sm ';
+    const BADGE_UP = BADGE_BASE + 'bg-up/10 text-up border border-up/30';
+    const BADGE_WARN = BADGE_BASE + 'bg-warn/10 text-warn border border-warn/30';
+    const BADGE_DOWN = BADGE_BASE + 'bg-down/20 text-down border border-down/40';
+    const KILL_BTN = 'px-3 py-1.5 bg-down/15 hover:bg-down text-down hover:text-white border border-down font-mono font-bold text-[11px] tracking-wide transition flex items-center space-x-1.5 cursor-pointer';
+    const RESUME_BTN = 'px-3 py-1.5 bg-up/20 text-up border border-up font-mono font-bold text-[11px] tracking-wide transition cursor-pointer';
+
+    function normStatus(v) {
+      const t = String(v || '').toUpperCase();
+      if (t.startsWith('HALT')) return 'HALTED';
+      if (t.startsWith('DATA')) return 'DATA_PAUSED';
+      if (t.startsWith('AUTO')) return 'AUTONOMOUS 24/7';
+      return null;
+    }
+    function isHalted() { return state.systemStatus === 'HALTED' || state.killEngaged; }
+
+    function renderStatus() {
+      const dot = $('statusDot'), badge = $('systemModeBadge'), btn = $('killSwitchBtn');
+      let label, bcls, dcls;
+      if (!state.connected) {
+        label = 'RECONNECTING…'; bcls = BADGE_WARN; dcls = 'w-2 h-2 rounded-full bg-warn live-dot';
+      } else if (isHalted()) {
+        label = 'HALTED — ALL POSITIONS CLOSED'; bcls = BADGE_DOWN; dcls = 'w-2 h-2 rounded-full bg-down';
+      } else if (state.systemStatus === 'DATA_PAUSED') {
+        label = 'DATA PAUSED'; bcls = BADGE_WARN; dcls = 'w-2 h-2 rounded-full bg-warn live-dot';
+      } else {
+        label = 'AUTONOMOUS 24/7'; bcls = BADGE_UP; dcls = 'w-2 h-2 rounded-full bg-up live-dot';
+      }
+      badge.textContent = label;
+      badge.className = bcls;
+      dot.className = dcls;
+
+      const span = btn.firstElementChild || btn.appendChild(document.createElement('span'));
+      if (isHalted()) {
+        span.textContent = '▶ RESUME AUTONOMOUS ENGINE';
+        btn.className = RESUME_BTN;
+      } else {
+        span.textContent = '■ EMERGENCY KILL-SWITCH';
+        btn.className = KILL_BTN;
+      }
+    }
+
+    function applyStatus(raw, engaged) {
+      const st = normStatus(raw);
+      if (st) state.systemStatus = st;
+      if (typeof engaged === 'boolean') {
+        state.killEngaged = engaged;
+        if (!st) state.systemStatus = engaged ? 'HALTED' : 'AUTONOMOUS 24/7';
+      } else if (st) {
+        state.killEngaged = st === 'HALTED';
+      }
+      renderStatus();
+    }
+
+    // ---------------------------------------------------------------- 4. KPI
+    function setText(id, t) { $(id).textContent = t; }
+    function setCls(id, c) { $(id).className = c; }
+
+    function applyKpis(k) {
+      if (!k || typeof k !== 'object') return;
+      state.kpis = Object.assign(state.kpis || {}, k);
+      k = state.kpis;
+
+      if (isNum(k.equity)) setText('kpiEquity', fmtPrice(k.equity));
+      if (isNum(k.equity_change_pct)) {
+        // equity_change_pct kesir olarak gelir (0.0482 == 4.82%), drawdown alanlarıyla aynı kural
+        const pct = k.equity_change_pct * 100;
+        setText('kpiEquityChange', (pct >= 0 ? '+' : '-') + nf(Math.abs(pct), 2, 2) + '%');
+        setCls('kpiEquityChange', 'font-mono text-[11px] tabular ' + (pct >= 0 ? 'text-up' : 'text-down'));
+      }
+      if (isNum(k.unrealized_pnl)) setUnrealized(k.unrealized_pnl);
+      if (isNum(k.realized_pnl_24h)) {
+        setText('kpiRealized', fmtSigned(k.realized_pnl_24h));
+        setCls('kpiRealized', 'font-mono text-lg font-bold tabular ' + pnlColor(k.realized_pnl_24h));
+      }
+      if (isNum(k.trades_24h)) setText('kpiTradeCount', nf(k.trades_24h, 0, 0) + ' Trades');
+      if (isNum(k.fees_paid_24h)) setText('kpiFees', 'Fees Paid: -' + fmtMoney(k.fees_paid_24h));
+      if (isNum(k.min_net_profit_usd)) setText('kpiMinNet', 'Min Net > ' + fmtMoney(k.min_net_profit_usd));
+      if ('win_rate' in k) setText('kpiWinRate', isNum(k.win_rate) ? nf(k.win_rate * 100, 1, 1) + '%' : '—');
+      if ('profit_factor' in k) {
+        setText('kpiPF', 'PF: ' + (isNum(k.profit_factor) ? nf(k.profit_factor, 2, 2) : '—'));
+        setCls('kpiPF', 'font-mono text-[11px] tabular ' + (isNum(k.profit_factor) ? (k.profit_factor >= 1 ? 'text-up' : 'text-down') : 'text-textMuted'));
+      }
+      if (typeof k.claude_model === 'string' && k.claude_model) setText('claudeEngine', k.claude_model.toUpperCase());
+      if (isNum(k.funding_rate)) setText('headerFunding', nf(k.funding_rate * 100, 4, 4) + '%');
+      if (typeof k.active_symbol === 'string' && k.active_symbol) setActiveSymbol(k.active_symbol);
+      renderDrawdown(k);
+      if (k.system_status !== undefined || typeof k.kill_switch_engaged === 'boolean') {
+        applyStatus(k.system_status, typeof k.kill_switch_engaged === 'boolean' ? k.kill_switch_engaged : undefined);
+      }
+    }
+
+    function setUnrealized(v) {
+      setText('kpiUnrealized', fmtSigned(v));
+      setCls('kpiUnrealized', 'font-mono text-lg font-bold tabular ' + pnlColor(v));
+    }
+
+    function renderDrawdown(k) {
+      if (!isNum(k.daily_drawdown_pct) || !isNum(k.daily_drawdown_limit_pct) || k.daily_drawdown_limit_pct <= 0) return;
+      const cur = k.daily_drawdown_pct, lim = k.daily_drawdown_limit_pct;
+      const ratio = cur / lim;
+      const color = ratio >= 0.8 ? 'down' : (ratio >= 0.5 ? 'warn' : 'up');
+      const txt = ratio >= 0.8 ? 'DANGER' : (ratio >= 0.5 ? 'CAUTION' : 'SAFE');
+      setText('kpiDdLabel', 'Daily Drawdown Limit (Max ' + nf(lim * 100, 0, 2) + '%)');
+      setText('kpiDdCurrent', 'Current: ' + nf(cur * 100, 2, 2) + '%');
+      setText('kpiDdState', txt);
+      setCls('kpiDdState', 'text-' + color);
+      setCls('kpiDdBar', 'bg-' + color + ' h-full');
+      $('kpiDdBar').style.width = Math.max(0, Math.min(100, ratio * 100)).toFixed(1) + '%';
+    }
+
+    function setActiveSymbol(sym) {
+      state.activeSymbol = sym;
+      setText('activeSymbol', sym);
+      setText('chartTitle', dispSym(sym) + ' PERPETUAL');
+    }
+
+    // ---------------------------------------------------------------- 5. POZİSYONLAR
+    function renderPositions() {
+      const tbody = $('positionsTableBody');
+      setText('posCount', String(state.positions.length));
+      tbody.innerHTML = state.positions.map((p) => {
+        const sideUp = p.side === 'LONG';
+        const sideBadge = sideUp
+          ? 'bg-up/10 text-up border border-up/30 px-1.5 py-0.5'
+          : 'bg-down/10 text-down border border-down/30 px-1.5 py-0.5';
+        const net = p.net_pnl;
+        const pnlClass = pnlColor(net);
+        const lev = isNum(p.leverage) ? nf(p.leverage, 0, 1) + 'x' : '';
+        const sl = isNum(p.hard_stop) ? fmtPlain(p.hard_stop) : '—';
+        const tpVal = isNum(p.take_profit) ? fmtPlain(p.take_profit) : (p.trailing_active ? 'TRAIL' : '—');
+        const tpCls = p.trailing_active ? 'text-accent' : 'text-up';
+        const pending = pendingClose.has(p.symbol);
+        return `
+          <tr class="hover:bg-bg/60 transition">
+            <td class="py-2.5 px-3 font-bold text-white">${escapeHtml(dispSym(p.symbol))} <span class="text-textMuted font-normal">${escapeHtml(lev)}</span></td>
+            <td class="py-2.5 px-2"><span class="${sideBadge} text-[10px] font-bold">${escapeHtml(p.side)}</span></td>
+            <td class="py-2.5 px-2 text-white">${escapeHtml(fmtQty(p.quantity))} ${escapeHtml(baseAsset(p.symbol))}</td>
+            <td class="py-2.5 px-2 text-textMuted">${escapeHtml(fmtPrice(p.entry_price))}</td>
+            <td class="py-2.5 px-2 text-white font-semibold">${escapeHtml(fmtPrice(p.mark_price))}</td>
+            <td class="py-2.5 px-2 text-[10px]">
+              <span class="text-down">${escapeHtml(sl)}</span> / <span class="${tpCls}">${escapeHtml(tpVal)}</span>
+            </td>
+            <td class="py-2.5 px-2 text-textMuted">${isNum(p.est_fee) ? '-' + escapeHtml(fmtMoney(p.est_fee)) : '—'}</td>
+            <td class="py-2.5 px-3 text-right font-bold ${pnlClass}">${escapeHtml(fmtSigned(net))}</td>
+            <td class="py-2.5 px-3 text-right">
+              <button data-symbol="${escapeHtml(p.symbol)}" ${pending ? 'disabled' : ''} class="px-2 py-0.5 bg-bg hover:bg-down hover:text-white border border-border text-textMuted text-[10px] transition">
+                MARKET CLOSE
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function upsertPosition(p) {
+      if (!p || typeof p.symbol !== 'string') return;
+      const i = state.positions.findIndex((x) => x.symbol === p.symbol);
+      if (i >= 0) state.positions[i] = Object.assign({}, state.positions[i], p);
+      else state.positions.push(p);
+    }
+
+    $('positionsTableBody').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-symbol]');
+      if (!btn || btn.disabled) return;
+      closePosition(btn.dataset.symbol);
+    });
+
+    // ---------------------------------------------------------------- 6. İŞLEM GEÇMİŞİ
+    function renderHistory() {
+      setText('histCount', String(state.history.length));
+      $('historyTableBody').innerHTML = state.history.map((h) => {
+        const net = h.net_pnl;
+        const feeTotal = isNum(h.fees_paid) ? h.fees_paid : null;
+        return `
+          <tr class="hover:bg-bg/60">
+            <td class="py-2 px-3 text-textMuted">${escapeHtml(fmtClock(parseTs(h.closed_at)))}</td>
+            <td class="py-2 px-2 font-bold text-white">${escapeHtml(dispSym(h.symbol))}</td>
+            <td class="py-2 px-2"><span class="${h.side === 'LONG' ? 'text-up' : 'text-down'} font-bold">${escapeHtml(h.side)}</span></td>
+            <td class="py-2 px-2 text-textMuted">${escapeHtml(fmtPlain(h.entry_price))} -> ${escapeHtml(fmtPlain(h.exit_price))}</td>
+            <td class="py-2 px-2 text-white">${escapeHtml(fmtSigned(h.gross_pnl))}</td>
+            <td class="py-2 px-2 text-textMuted">${feeTotal === null ? '—' : '-' + escapeHtml(fmtMoney(feeTotal))}</td>
+            <td class="py-2 px-3 text-right font-bold ${pnlColor(net)}">${escapeHtml(fmtSigned(net))}</td>
+            <td class="py-2 px-3 text-textMuted text-[10px]">${escapeHtml(h.trigger || h.exit_reason || '')}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function sortHistory() {
+      state.history.sort((a, b) => (parseTs(b.closed_at) || 0) - (parseTs(a.closed_at) || 0));
+      state.history.length = Math.min(state.history.length, LIMITS.history);
+    }
+    function upsertTrade(t) {
+      if (!t || typeof t !== 'object') return;
+      const i = t.trade_id != null ? state.history.findIndex((x) => x.trade_id === t.trade_id) : -1;
+      if (i >= 0) state.history[i] = t; else state.history.unshift(t);
+      sortHistory();
+    }
+
+    // ---------------------------------------------------------------- 7. CLAUDE KARAR AKIŞI
+    const BADGE_COLORS = {
+      up: 'text-up border-up/40 bg-up/10',
+      down: 'text-down border-down/40 bg-down/10',
+      warn: 'text-warn border-warn/40 bg-warn/10',
+      accent: 'text-accent border-accent/40 bg-accent/10',
+    };
+    function badgeTone(d) {
+      const a = String(d.action || '').toUpperCase();
+      const rd = String(d.risk_decision || '').toUpperCase();
+      if (d.fallback || rd === 'REJECTED' || a.startsWith('HOLD') || a.startsWith('REJECT')) return 'warn';
+      if (a.startsWith('LONG') || a.startsWith('OPEN')) return 'up';
+      if (a.startsWith('SHORT')) return 'down';
+      if (a.startsWith('CLOSE') || a.startsWith('TRAIL')) return 'accent';
+      return 'warn';
+    }
+    function logFromDecision(d) {
+      const parts = [String(d.action || '—')];
+      if (d.risk_decision) parts.push(String(d.risk_decision));
+      if (d.execution_status) parts.push(String(d.execution_status));
+      return {
+        key: 'd:' + d.decision_id,
+        time: parseTs(d.timestamp || d.created_at),
+        symbol: dispSym(d.symbol),
+        action: parts.join(' · '),
+        tone: badgeTone(d),
+        metrics: d.metrics_summary || '',
+        reason: d.reasoning_tr || '',
+      };
+    }
+    function pushWarnCard(symbol, action, metrics, reason) {
+      state.logs.unshift({ key: 'e:' + (++errSeq), time: Date.now(), symbol, action, tone: 'warn', metrics, reason });
+      state.logs.length = Math.min(state.logs.length, LIMITS.logs);
+      renderLogs();
+    }
+    function upsertLog(entry) {
+      const i = state.logs.findIndex((x) => x.key === entry.key);
+      if (i >= 0) {
+        if (!isNum(entry.time)) entry.time = state.logs[i].time;
+        state.logs[i] = entry;
+      } else {
+        state.logs.unshift(entry);
+        state.logs.sort((a, b) => (b.time || 0) - (a.time || 0));
+        state.logs.length = Math.min(state.logs.length, LIMITS.logs);
+      }
+    }
+    function renderLogs() {
+      $('claudeLogContainer').innerHTML = state.logs.map((log) => `
+        <div class="bg-bg border border-border p-2.5">
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center space-x-2">
+              <span class="text-textMuted text-[10px]">[${escapeHtml(fmtClock(log.time))}]</span>
+              <span class="font-bold text-white">${escapeHtml(log.symbol)}</span>
+            </div>
+            <span class="px-1.5 py-0.5 text-[9px] font-bold border ${BADGE_COLORS[log.tone] || BADGE_COLORS.warn}">${escapeHtml(log.action)}</span>
+          </div>
+          ${log.metrics ? `<div class="text-[10px] text-accent mb-1.5 pb-1.5 border-b border-border/60">${escapeHtml(log.metrics)}</div>` : ''}
+          <p class="text-textMain text-[11px] leading-relaxed font-sans">${escapeHtml(log.reason)}</p>
+        </div>
+      `).join('');
+    }
+
+    // ---------------------------------------------------------------- 8. HABER RADARI
+    function newsTone(n) {
+      const sc = isNum(n.sentiment_score) ? n.sentiment_score : 0;
+      const lbl = String(n.sentiment_label || '').toUpperCase();
+      const pct = Math.round(Math.abs(sc) * 100);
+      if (lbl === 'BULLISH') return { color: 'text-up', text: '+' + pct + '% BULL' };
+      if (lbl === 'BEARISH') return { color: 'text-down', text: '-' + pct + '% BEAR' };
+      return { color: 'text-textMuted', text: 'NEUTRAL' };
+    }
+    function renderNews() {
+      $('newsContainer').innerHTML = state.news.map((n) => {
+        const tone = newsTone(n);
+        const ago = fmtAgo(parseTs(n.time));
+        return `
+        <div class="p-2.5 hover:bg-bg/50 transition">
+          <div class="flex items-center justify-between text-[10px] mb-1">
+            <span class="text-textMuted">${escapeHtml(String(n.source || '').toUpperCase())}${ago ? ' · ' + escapeHtml(ago) : ''}</span>
+            <span class="font-bold ${tone.color}">[${escapeHtml(tone.text)}]</span>
+          </div>
+          <div class="text-textMain font-sans text-xs leading-snug">${escapeHtml(n.title)}</div>
+        </div>`;
+      }).join('');
+      renderNewsAggregate();
+    }
+    function renderNewsAggregate() {
+      const el = $('newsAggregate');
+      const scores = state.news.map((n) => n.sentiment_score).filter(isNum);
+      if (!scores.length) { el.textContent = 'AGGREGATED: —'; el.className = 'text-[10px] text-textMuted'; return; }
+      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+      const pct = Math.round(avg * 100);
+      let word = 'NEUTRAL', cls = 'text-textMuted';
+      if (avg > 0.1) { word = 'BULLISH'; cls = 'text-up'; }
+      else if (avg < -0.1) { word = 'BEARISH'; cls = 'text-down'; }
+      el.textContent = 'AGGREGATED: ' + (pct >= 0 ? '+' : '') + pct + '% ' + word;
+      el.className = 'text-[10px] ' + cls;
+    }
+    function upsertNews(n) {
+      if (!n || typeof n !== 'object') return;
+      const i = n.news_id != null ? state.news.findIndex((x) => x.news_id === n.news_id) : -1;
+      if (i >= 0) state.news[i] = n; else state.news.unshift(n);
+      state.news.sort((a, b) => (parseTs(b.time) || 0) - (parseTs(a.time) || 0));
+      state.news.length = Math.min(state.news.length, LIMITS.news);
+    }
+    setInterval(renderNews, 30000);   // "2m ago" etiketlerini tazele
+
+    // ---------------------------------------------------------------- 9. GRAFİK VERİSİ / MARKER
+    function cleanCandles(list) {
+      const byTime = new Map();
+      (Array.isArray(list) ? list : []).forEach((c) => {
+        if (c && isNum(c.time) && isNum(c.open) && isNum(c.high) && isNum(c.low) && isNum(c.close)) byTime.set(c.time, c);
+      });
+      return Array.from(byTime.values()).sort((a, b) => a.time - b.time);
+    }
+    function setCandles(list) {
+      const data = cleanCandles(list);
+      candleSeries.setData(data);
+      state.lastCandleTime = data.length ? data[data.length - 1].time : 0;
+      if (data.length) chart.timeScale().fitContent();
+    }
+    function applyMarkers() {
+      const seen = new Set();
+      const list = state.markers.filter((m) => {
+        const k = m.time + '|' + m.text + '|' + m.position;
+        if (seen.has(k)) return false;
+        seen.add(k); return true;
+      }).sort((a, b) => a.time - b.time).slice(-LIMITS.markers);
+      state.markers = list;
+      candleSeries.setMarkers(list);
+    }
+    function setMarkers(list) {
+      state.markers = (Array.isArray(list) ? list : []).filter((m) => m && isNum(m.time)).map((m) => ({
+        time: m.time,
+        position: m.position === 'aboveBar' ? 'aboveBar' : 'belowBar',
+        color: typeof m.color === 'string' ? m.color : '#3B82F6',
+        shape: ['arrowUp', 'arrowDown', 'circle', 'square'].includes(m.shape) ? m.shape : 'circle',
+        text: String(m.text || ''),
+      }));
+      applyMarkers();
+    }
+    function addMarker(m) { state.markers.push(m); applyMarkers(); }
+    function markerForOpen(p) {
+      const t = Math.floor(parseTs(p.opened_at) / 1000);
+      const time = isNum(t) ? t : Math.floor(Date.now() / 1000);
+      const long = p.side === 'LONG';
+      return {
+        time, position: long ? 'belowBar' : 'aboveBar', color: long ? '#00C805' : '#FF3B30',
+        shape: long ? 'arrowUp' : 'arrowDown',
+        text: 'CLAUDE ' + p.side + ' @ ' + fmtPlain(p.entry_price),
+      };
+    }
+    const EXIT_LABEL = { TAKE_PROFIT: 'TP', STOP_LOSS: 'SL', TRAILING_STOP: 'TRAIL', MANUAL: 'MANUAL', KILL_SWITCH: 'KILL' };
+    function markerForClose(t) {
+      const ms = parseTs(t.closed_at);
+      const time = isNum(ms) ? Math.floor(ms / 1000) : Math.floor(Date.now() / 1000);
+      const long = t.side === 'LONG';
+      const win = !(isNum(t.net_pnl) && t.net_pnl < 0);
+      return {
+        time, position: long ? 'aboveBar' : 'belowBar', color: win ? '#00C805' : '#FF3B30',
+        shape: long ? 'arrowDown' : 'arrowUp',
+        text: (EXIT_LABEL[t.exit_reason] || String(t.exit_reason || 'CLOSE')) + ' ' + fmtSigned(t.net_pnl),
+      };
+    }
+
+    // ---------------------------------------------------------------- 10. MESAJ İŞLEYİCİLER
+    function onSnapshot(d) {
+      applyKpis(d.equity_kpis);
+      if (typeof d.active_symbol === 'string') setActiveSymbol(d.active_symbol);
+      setCandles(d.candles);
+      setMarkers(d.markers);
+      state.positions = (Array.isArray(d.open_positions) ? d.open_positions : []).filter((p) => p && typeof p.symbol === 'string');
+      renderPositions();
+      state.history = (Array.isArray(d.trade_history) ? d.trade_history : []).slice();
+      sortHistory();
+      renderHistory();
+      state.logs = state.logs.filter((l) => l.key.startsWith('e:'));  // REST/ERROR kartlarını koru
+      (Array.isArray(d.claude_logs) ? d.claude_logs : []).forEach((x) => upsertLog(logFromDecision(x)));
+      renderLogs();
+      state.news = [];
+      (Array.isArray(d.news_feed) ? d.news_feed : []).forEach(upsertNews);
+      renderNews();
+      if (d.market_health && typeof d.market_health === 'object') onMarketHealth(d.market_health);
+      if (state.kpis && isNum(state.kpis.unrealized_pnl)) setUnrealized(state.kpis.unrealized_pnl);
+    }
+    function onMarketHealth(d) {
+      const st = normStatus(d.system_status);
+      if (st) applyStatus(st, undefined);
+      const badge = $('systemModeBadge');
+      const reasons = Array.isArray(d.reasons) ? d.reasons.map(String).join('; ') : '';
+      if (reasons) badge.setAttribute('title', reasons); else badge.removeAttribute('title');
+    }
+    let lastPrice = null;
+    function onTick(d) {
+      if (state.activeSymbol && d.symbol && d.symbol !== state.activeSymbol) return;
+      const px = isNum(d.last) ? d.last : (isNum(d.mark) ? d.mark : null);
+      if (px !== null) {
+        const up = lastPrice === null || px >= lastPrice;
+        setText('liveHeaderPrice', fmtPrice(px));
+        setCls('liveHeaderPrice', 'font-bold tabular text-sm ' + (up ? 'text-up' : 'text-down'));
+        lastPrice = px;
+      }
+      if (isNum(d.spread)) setText('chartSpread', nf(d.spread, 2, 4) + ' USDT');
+      if (isNum(d.funding_rate)) setText('headerFunding', nf(d.funding_rate * 100, 4, 4) + '%');
+    }
+    function onCandleUpdate(d) {
+      if (state.activeSymbol && d.symbol && d.symbol !== state.activeSymbol) return;
+      const c = d.candle;
+      if (!c || !isNum(c.time) || !isNum(c.open) || !isNum(c.high) || !isNum(c.low) || !isNum(c.close)) return;
+      if (c.time < state.lastCandleTime) return;
+      candleSeries.update(c);
+      state.lastCandleTime = c.time;
+    }
+    function onDecision(d) {
+      if (!d || d.decision_id == null) return;
+      const entry = logFromDecision(d);
+      const prev = state.logs.find((x) => x.key === entry.key);
+      if (prev && d.update) {
+        // güncelleme mesajı: risk/yürütme alanları gelir, geri kalanı korunur
+        entry.metrics = entry.metrics || prev.metrics;
+        entry.reason = entry.reason || prev.reason;
+      }
+      upsertLog(entry);
+      renderLogs();
+    }
+
+    const handlers = {
+      INITIAL_SNAPSHOT: onSnapshot,
+      MARKET_TICK: onTick,
+      CANDLE_UPDATE: onCandleUpdate,
+      CLAUDE_DECISION: onDecision,
+      EXECUTION_REPORT: () => {},   // sonuç CLAUDE_DECISION güncellemesiyle zaten gösteriliyor
+      POSITION_OPENED: (d) => {
+        upsertPosition(d); renderPositions();
+        if (d && d.side) addMarker(markerForOpen(d));
+      },
+      POSITION_UPDATED: (d) => { upsertPosition(d); renderPositions(); },
+      POSITION_CLOSED: (d) => {
+        if (!d) return;
+        state.positions = state.positions.filter((p) => p.symbol !== d.symbol);
+        pendingClose.delete(d.symbol);
+        renderPositions();
+        if (d.trade) { upsertTrade(d.trade); renderHistory(); addMarker(markerForClose(d.trade)); }
+      },
+      POSITIONS_PNL: (d) => {
+        if (Array.isArray(d.positions)) {
+          state.positions = d.positions.filter((p) => p && typeof p.symbol === 'string');
+          renderPositions();
+        }
+        if (isNum(d.unrealized_total)) setUnrealized(d.unrealized_total);
+      },
+      EQUITY_KPIS: applyKpis,
+      KILL_SWITCH: (d) => {
+        applyStatus(d.system_status, typeof d.engaged === 'boolean' ? d.engaged : undefined);
+        if (d.engaged && d.reason) pushWarnCard('SYSTEM', 'KILL-SWITCH', '', String(d.reason));
+      },
+      NEWS: (d) => { upsertNews(d); renderNews(); },
+      MARKET_HEALTH: onMarketHealth,
+      RISK_EVENT: (d) => pushWarnCard('RISK', String(d.level || 'RISK').toUpperCase(), String(d.code || ''), String(d.message || '')),
+      CANDLES: (d) => {
+        if (typeof d.symbol === 'string') setActiveSymbol(d.symbol);
+        setCandles(d.candles);
+        setMarkers(d.markers);
+      },
+      PONG: (d) => {
+        const t = d && d.t;
+        if (!isNum(t)) return;
+        showLatency(Math.max(0, Date.now() - t));
+      },
+      ERROR: (d) => pushWarnCard('SERVER', 'ERROR', String((d && d.code) || ''), String((d && (d.message || d.detail)) || 'Unknown error')),
+    };
+
+    function showLatency(ms) {
+      const el = $('latencyValue');
+      el.textContent = Math.round(ms) + 'ms';
+      el.className = 'tabular ' + (ms < 150 ? 'text-up' : (ms < 500 ? 'text-warn' : 'text-down'));
+    }
+    function clearLatency() {
+      const el = $('latencyValue');
+      el.textContent = '—';
+      el.className = 'text-textMuted tabular';
+    }
+
+    // ---------------------------------------------------------------- 11. WEBSOCKET (üstel geri çekilmeli yeniden bağlanma)
+    const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/terminal';
+    let ws = null, attempt = 0, pingTimer = null, reconnectTimer = null;
+
+    function backoffDelay() {
+      const base = Math.min(15000, 500 * Math.pow(2, attempt));
+      return base * (1 + (Math.random() * 0.4 - 0.2));
+    }
+    function connect() {
+      let sock;
+      try { sock = new WebSocket(WS_URL); } catch (e) { scheduleReconnect(); return; }
+      ws = sock;
+      let lastSeq = 0;   // bağlantı başına
+
+      sock.onopen = () => {
+        if (ws !== sock) return;
+        state.connected = true;
+        renderStatus();
+        sendPing();
+        clearInterval(pingTimer);
+        pingTimer = setInterval(sendPing, 2000);
+      };
+      sock.onmessage = (ev) => {
+        if (ws !== sock) return;
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch (e) { return; }
+        if (!msg || typeof msg.type !== 'string') return;
+        if (isNum(msg.seq)) {
+          if (msg.seq <= lastSeq) return;
+          lastSeq = msg.seq;
+        }
+        const h = handlers[msg.type];
+        if (!h) return;
+        try {
+          h(msg.data || {});
+          if (msg.type === 'INITIAL_SNAPSHOT') attempt = 0;
+        } catch (e) {
+          console.warn('message handler failed', msg.type, e);
+        }
+      };
+      sock.onclose = () => {
+        if (ws !== sock) return;
+        state.connected = false;
+        clearInterval(pingTimer);
+        clearLatency();
+        renderStatus();
+        scheduleReconnect();
+      };
+      sock.onerror = () => { try { sock.close(); } catch (e) { /* yoksay */ } };
+    }
+    function scheduleReconnect() {
+      clearTimeout(reconnectTimer);
+      const delay = backoffDelay();
+      attempt += 1;
+      reconnectTimer = setTimeout(connect, delay);
+    }
+    function sendPing() {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'PING', t: Date.now() }));
+    }
+
+    // ---------------------------------------------------------------- 12. REST KONTROL (kill-switch / kapatma)
+    async function apiCall(method, path, body, needsToken) {
+      const doFetch = () => {
+        const headers = {};
+        if (body !== undefined) headers['Content-Type'] = 'application/json';
+        if (needsToken && controlToken) headers['X-Control-Token'] = controlToken;
+        return fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      };
+      let res = await doFetch();
+      if (res.status === 401 && needsToken) {
+        const t = window.prompt('Kontrol token (X-Control-Token):');
+        if (!t) throw new Error('Yetkilendirme gerekli (401): token girilmedi');
+        controlToken = t.trim();
+        res = await doFetch();
+        if (res.status === 401) {
+          controlToken = null;
+          throw new Error('Yetkilendirme reddedildi (401): token geçersiz');
+        }
+      }
+      let data = null;
+      try { data = await res.json(); } catch (e) { /* gövde yok */ }
+      if (!res.ok) {
+        const detail = data && (data.detail || data.message || data.error);
+        throw new Error('HTTP ' + res.status + (detail ? ': ' + (typeof detail === 'string' ? detail : JSON.stringify(detail)) : ''));
+      }
+      return data;
+    }
+    function restError(what, err) {
+      pushWarnCard('REST', 'ERROR', what, err && err.message ? err.message : String(err));
+    }
+
+    async function closePosition(symbol) {
+      if (pendingClose.has(symbol)) return;
+      pendingClose.add(symbol);
+      renderPositions();
+      try {
+        await apiCall('POST', '/api/v1/positions/' + encodeURIComponent(symbol) + '/close', undefined, true);
+      } catch (e) {
+        restError('POST /positions/' + dispSym(symbol) + '/close', e);
+      } finally {
+        pendingClose.delete(symbol);
+        renderPositions();
+      }
+    }
+
+    async function toggleKillSwitch() {
+      if (killBusy) return;
+      killBusy = true;
+      try {
+        if (!isHalted()) {
+          if (!window.confirm('Tüm pozisyonlar piyasa emriyle kapatılacak. Emin misin?')) return;
+          await apiCall('POST', '/api/v1/kill-switch', { reason: 'MANUAL_UI_TRIGGER' }, false);
+        } else {
+          const operator = window.prompt('Operatör adı:');
+          if (!operator || !operator.trim()) return;
+          const confirmText = window.prompt('Devam etmek için RESET yazın:');
+          if (confirmText !== 'RESET') return;
+          await apiCall('POST', '/api/v1/kill-switch/resume', { operator: operator.trim(), confirm: 'RESET' }, true);
+        }
+      } catch (e) {
+        restError(isHalted() ? 'POST /kill-switch/resume' : 'POST /kill-switch', e);
+      } finally {
+        killBusy = false;
+      }
+    }
+
+    function switchTab(tab) {
+      const posView = $('viewPositions');
+      const histView = $('viewHistory');
+      const tabPos = $('tabPositions');
+      const tabHist = $('tabHistory');
+
+      if (tab === 'positions') {
+        posView.classList.remove('hidden');
+        histView.classList.add('hidden');
+        tabPos.className = 'border-b-2 border-white text-white font-semibold h-full flex items-center';
+        tabHist.className = 'border-b-2 border-transparent text-textMuted hover:text-white h-full flex items-center';
+      } else {
+        posView.classList.add('hidden');
+        histView.classList.remove('hidden');
+        tabHist.className = 'border-b-2 border-white text-white font-semibold h-full flex items-center';
+        tabPos.className = 'border-b-2 border-transparent text-textMuted hover:text-white h-full flex items-center';
+      }
+    }
+
+    function switchMarket(market) {
+      const overlay = $('usEquitiesOverlay');
+      const btnCrypto = $('btnCrypto');
+      const btnUs = $('btnUsStocks');
+
+      if (market === 'US_EQUITIES') {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('flex');
+        btnUs.className = 'px-3 py-1 font-mono text-[11px] font-medium bg-panel text-white border border-border rounded-sm flex items-center space-x-1.5 transition';
+        btnCrypto.className = 'px-3 py-1 font-mono text-[11px] font-medium text-textMuted hover:text-white transition';
+      } else {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+        btnCrypto.className = 'px-3 py-1 font-mono text-[11px] font-medium bg-panel text-white border border-border rounded-sm transition';
+        btnUs.className = 'px-3 py-1 font-mono text-[11px] font-medium text-textMuted hover:text-white flex items-center space-x-1.5 transition';
+      }
+    }
+
+    // İlk yükleme: bağlantı kurulana kadar "RECONNECTING…" görünür
+    renderStatus();
+    connect();
+  </script>
+</body>
+</html>
